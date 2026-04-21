@@ -1,0 +1,73 @@
+services:
+  postgres-shortener:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: urlshortener
+      POSTGRES_USER: shortener_user
+      POSTGRES_PASSWORD: shortener_pass_2024
+    volumes:
+      - pg-shortener-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "shortener_user", "-d", "urlshortener"]
+      interval: 5s
+      retries: 10
+
+  postgres-analytics:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: analytics
+      POSTGRES_USER: analytics_user
+      POSTGRES_PASSWORD: analytics_pass_2024
+    volumes:
+      - pg-analytics-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "analytics_user", "-d", "analytics"]
+      interval: 5s
+      retries: 10
+
+  shortener-service:
+    build:
+      context: .
+      dockerfile: Dockerfile.shortener
+    ports:
+      - "9000:8000"
+    environment:
+      DATABASE_URL: postgresql://shortener_user:shortener_pass_2024@postgres-shortener:5432/urlshortener
+      ANALYTICS_GRPC_URL: analytics-service:50051
+      BASE_URL: http://localhost:9000
+    depends_on:
+      postgres-shortener:
+        condition: service_healthy
+      analytics-service:
+        condition: service_started
+
+  analytics-service:
+    build:
+      context: .
+      dockerfile: Dockerfile.analytics
+    ports:
+      - "9001:8001"
+      - "50052:50051"
+    environment:
+      DATABASE_URL: postgresql://analytics_user:analytics_pass_2024@postgres-analytics:5432/analytics
+      GRPC_PORT: "50051"
+    depends_on:
+      postgres-analytics:
+        condition: service_healthy
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        VITE_SHORTENER_URL: http://localhost:9000
+        VITE_ANALYTICS_URL: http://localhost:9001
+    ports:
+      - "9003:80"
+    depends_on:
+      - shortener-service
+      - analytics-service
+
+volumes:
+  pg-shortener-data:
+  pg-analytics-data:

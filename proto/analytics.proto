@@ -1,0 +1,29 @@
+syntax = "proto3";
+
+package analytics;
+
+service AnalyticsService {
+  rpc RecordClick (ClickRequest) returns (ClickResponse);
+  rpc GetStats    (StatsRequest) returns (StatsResponse);
+}
+
+message ClickRequest {
+  string short_code = 1;
+  string ip_address = 2;
+  string user_agent = 3;
+}
+
+message ClickResponse {
+  bool   success    = 1;
+  string message    = 2;
+}
+
+message StatsRequest {
+  string short_code = 1;
+}
+
+message StatsResponse {
+  string short_code  = 1;
+  int64  click_count = 2;
+  string created_at  = 3;
+}

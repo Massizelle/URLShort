@@ -1,0 +1,109 @@
+# -----------------------------------------------------------------------
+# ServiceAccount pour le shortener-service
+# -----------------------------------------------------------------------
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: shortener-sa
+  namespace: urlshort
+---
+# Role : le shortener peut lire ses propres secrets et configmaps
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: shortener-role
+  namespace: urlshort
+rules:
+  - apiGroups: [""]
+    resources: ["secrets", "configmaps"]
+    verbs: ["get", "list"]
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["get", "list"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: shortener-rolebinding
+  namespace: urlshort
+subjects:
+  - kind: ServiceAccount
+    name: shortener-sa
+    namespace: urlshort
+roleRef:
+  kind: Role
+  name: shortener-role
+  apiGroup: rbac.authorization.k8s.io
+---
+# -----------------------------------------------------------------------
+# ServiceAccount pour le analytics-service
+# -----------------------------------------------------------------------
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: analytics-sa
+  namespace: urlshort
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: analytics-role
+  namespace: urlshort
+rules:
+  - apiGroups: [""]
+    resources: ["secrets", "configmaps"]
+    verbs: ["get", "list"]
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["get", "list"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: analytics-rolebinding
+  namespace: urlshort
+subjects:
+  - kind: ServiceAccount
+    name: analytics-sa
+    namespace: urlshort
+roleRef:
+  kind: Role
+  name: analytics-role
+  apiGroup: rbac.authorization.k8s.io
+---
+# -----------------------------------------------------------------------
+# NetworkPolicy — isolation réseau entre namespaces
+# -----------------------------------------------------------------------
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: deny-external-to-postgres
+  namespace: urlshort
+spec:
+  podSelector:
+    matchLabels:
+      app: postgres-shortener
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app: shortener-service
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: deny-external-to-postgres-analytics
+  namespace: urlshort
+spec:
+  podSelector:
+    matchLabels:
+      app: postgres-analytics
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app: analytics-service

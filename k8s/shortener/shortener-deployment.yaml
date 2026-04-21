@@ -1,0 +1,81 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: shortener-service
+  namespace: urlshort
+  labels:
+    app: shortener-service
+    version: v1
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: shortener-service
+  template:
+    metadata:
+      labels:
+        app: shortener-service
+        version: v1
+      annotations:
+        traffic.sidecar.istio.io/excludeOutboundPorts: "50051"
+    spec:
+      serviceAccountName: shortener-sa
+      containers:
+        - name: shortener
+          image: massizelle/shortener-service:latest
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 8000
+          env:
+            # DB_USER et DB_PASS DOIVENT être définis AVANT DATABASE_URL
+            # pour que Kubernetes puisse interpoler $(DB_USER) et $(DB_PASS)
+            - name: DB_USER
+              valueFrom:
+                secretKeyRef:
+                  name: postgres-shortener-secret
+                  key: username
+            - name: DB_PASS
+              valueFrom:
+                secretKeyRef:
+                  name: postgres-shortener-secret
+                  key: password
+            - name: DATABASE_URL
+              value: postgresql://$(DB_USER):$(DB_PASS)@postgres-shortener:5432/urlshortener
+            - name: ANALYTICS_GRPC_URL
+              value: "analytics-service:50051"
+            - name: BASE_URL
+              value: "http://urlshort.local"
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: 10
+            periodSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: 20
+            periodSeconds: 10
+          resources:
+            requests:
+              memory: "128Mi"
+              cpu: "100m"
+            limits:
+              memory: "256Mi"
+              cpu: "300m"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: shortener-service
+  namespace: urlshort
+  labels:
+    app: shortener-service
+spec:
+  selector:
+    app: shortener-service
+  ports:
+    - name: http
+      port: 80
+      targetPort: 8000

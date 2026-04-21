@@ -1,0 +1,126 @@
+# -----------------------------------------------------------------------
+# Namespace avec injection automatique du sidecar Istio
+# -----------------------------------------------------------------------
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: urlshort
+  labels:
+    istio-injection: enabled
+---
+# -----------------------------------------------------------------------
+# Istio Gateway — point d'entrée unique du cluster
+# -----------------------------------------------------------------------
+apiVersion: networking.istio.io/v1beta1
+kind: Gateway
+metadata:
+  name: urlshort-gateway
+  namespace: urlshort
+spec:
+  selector:
+    istio: ingressgateway
+  servers:
+    - port:
+        number: 80
+        name: http
+        protocol: HTTP
+      hosts:
+        - "urlshort.local"
+---
+# -----------------------------------------------------------------------
+# VirtualService — routing par préfixe de path
+# -----------------------------------------------------------------------
+apiVersion: networking.istio.io/v1beta1
+kind: VirtualService
+metadata:
+  name: urlshort-vs
+  namespace: urlshort
+spec:
+  hosts:
+    - "urlshort.local"
+  gateways:
+    - urlshort-gateway
+  http:
+    # Frontend (catch-all en dernier)
+    - match:
+        - uri:
+            prefix: "/app"
+      rewrite:
+        uri: "/"
+      route:
+        - destination:
+            host: frontend
+            port:
+              number: 80
+
+    # Analytics — stats (avant le shortener pour éviter que /stats matche la regex short code)
+    - match:
+        - uri:
+            prefix: "/stats"
+        - uri:
+            prefix: "/analytics"
+      route:
+        - destination:
+            host: analytics-service
+            port:
+              number: 80
+
+    # Shortener — raccourcir + redirection + liste URLs
+    - match:
+        - uri:
+            prefix: "/shorten"
+        - uri:
+            prefix: "/info"
+        - uri:
+            prefix: "/urls"
+        - uri:
+            regex: "^/[A-Za-z0-9]{4,10}$"
+      route:
+        - destination:
+            host: shortener-service
+            port:
+              number: 80
+
+    # Tout le reste (racine, /assets/, favicon, etc.) → frontend
+    - route:
+        - destination:
+            host: frontend
+            port:
+              number: 80
+---
+# -----------------------------------------------------------------------
+# PeerAuthentication — mTLS STRICT entre tous les pods du namespace
+# -----------------------------------------------------------------------
+apiVersion: security.istio.io/v1beta1
+kind: PeerAuthentication
+metadata:
+  name: default
+  namespace: urlshort
+spec:
+  mtls:
+    mode: STRICT
+---
+# -----------------------------------------------------------------------
+# DestinationRule — activer mTLS côté client pour chaque service
+# -----------------------------------------------------------------------
+apiVersion: networking.istio.io/v1beta1
+kind: DestinationRule
+metadata:
+  name: shortener-dr
+  namespace: urlshort
+spec:
+  host: shortener-service
+  trafficPolicy:
+    tls:
+      mode: ISTIO_MUTUAL
+---
+apiVersion: networking.istio.io/v1beta1
+kind: DestinationRule
+metadata:
+  name: analytics-dr
+  namespace: urlshort
+spec:
+  host: analytics-service
+  trafficPolicy:
+    tls:
+      mode: ISTIO_MUTUAL

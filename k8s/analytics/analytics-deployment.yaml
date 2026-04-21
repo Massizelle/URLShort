@@ -1,0 +1,86 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: analytics-service
+  namespace: urlshort
+  labels:
+    app: analytics-service
+    version: v1
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: analytics-service
+  template:
+    metadata:
+      labels:
+        app: analytics-service
+        version: v1
+      annotations:
+        traffic.sidecar.istio.io/excludeInboundPorts: "50051"
+    spec:
+      serviceAccountName: analytics-sa
+      containers:
+        - name: analytics
+          image: massizelle/analytics-service:latest
+          imagePullPolicy: Always
+          ports:
+            - name: http
+              containerPort: 8001
+            - name: grpc
+              containerPort: 50051
+          env:
+            # DB_USER et DB_PASS DOIVENT être définis AVANT DATABASE_URL
+            # pour que Kubernetes puisse interpoler $(DB_USER) et $(DB_PASS)
+            - name: DB_USER
+              valueFrom:
+                secretKeyRef:
+                  name: postgres-analytics-secret
+                  key: username
+            - name: DB_PASS
+              valueFrom:
+                secretKeyRef:
+                  name: postgres-analytics-secret
+                  key: password
+            - name: DATABASE_URL
+              value: postgresql://$(DB_USER):$(DB_PASS)@postgres-analytics:5432/analytics
+            - name: GRPC_PORT
+              value: "50051"
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8001
+            initialDelaySeconds: 10
+            periodSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8001
+            initialDelaySeconds: 20
+            periodSeconds: 10
+          resources:
+            requests:
+              memory: "128Mi"
+              cpu: "100m"
+            limits:
+              memory: "256Mi"
+              cpu: "300m"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: analytics-service
+  namespace: urlshort
+  labels:
+    app: analytics-service
+spec:
+  selector:
+    app: analytics-service
+  ports:
+    - name: http
+      port: 80
+      targetPort: 8001
+    - name: grpc
+      port: 50051
+      targetPort: 50051
+      appProtocol: grpc

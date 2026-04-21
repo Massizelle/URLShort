@@ -1,0 +1,15 @@
+FROM python:3.12-slim
+
+WORKDIR /app
+
+COPY analytics-service/requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+COPY analytics-service/ .
+COPY proto/ proto/
+
+RUN chmod +x start.sh
+
+EXPOSE 8001 50051
+
+CMD ["./start.sh"]

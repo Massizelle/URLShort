@@ -1,0 +1,115 @@
+# =============================================================================
+# NetworkPolicies — contrôle du trafic inter-pods dans le namespace urlshort
+# =============================================================================
+
+# Règle par défaut : bloquer tout trafic entrant non explicitement autorisé
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-deny-ingress
+  namespace: urlshort
+spec:
+  podSelector: {}
+  policyTypes:
+    - Ingress
+---
+# Frontend : accepte uniquement le trafic de l'Istio ingress gateway
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-frontend-ingress
+  namespace: urlshort
+spec:
+  podSelector:
+    matchLabels:
+      app: frontend
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: istio-system
+        - podSelector: {}
+---
+# Shortener : accepte le trafic de l'ingress gateway et des pods du namespace
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-shortener-ingress
+  namespace: urlshort
+spec:
+  podSelector:
+    matchLabels:
+      app: shortener-service
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: istio-system
+        - podSelector: {}
+---
+# Analytics : accepte uniquement le trafic depuis shortener (gRPC) et l'ingress (REST)
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-analytics-ingress
+  namespace: urlshort
+spec:
+  podSelector:
+    matchLabels:
+      app: analytics-service
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: istio-system
+        - podSelector:
+            matchLabels:
+              app: shortener-service
+---
+# PostgreSQL shortener : accepte uniquement les connexions depuis shortener-service
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-postgres-shortener
+  namespace: urlshort
+spec:
+  podSelector:
+    matchLabels:
+      app: postgres-shortener
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app: shortener-service
+      ports:
+        - protocol: TCP
+          port: 5432
+---
+# PostgreSQL analytics : accepte uniquement les connexions depuis analytics-service
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-postgres-analytics
+  namespace: urlshort
+spec:
+  podSelector:
+    matchLabels:
+      app: postgres-analytics
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app: analytics-service
+      ports:
+        - protocol: TCP
+          port: 5432

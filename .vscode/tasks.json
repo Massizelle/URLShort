@@ -1,0 +1,15 @@
+{
+	"version": "2.0.0",
+	"tasks": [
+		{
+			"type": "Live Preview",
+			"workspacePath": "c:\\Users\\home\\Downloads\\urlshortener_final",
+			"problemMatcher": [],
+			"label": "Live Preview: Exécuter le serveur",
+			"group": {
+				"kind": "build",
+				"isDefault": true
+			}
+		}
+	]
+}
